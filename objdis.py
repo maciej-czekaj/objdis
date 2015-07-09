@@ -13,6 +13,7 @@ REG_MEM = re.compile("\[([a-z][a-z0-9]*)(?:,#(-?\d+))?\](!)?")
 #ADDR = re.compile("([0-9a-f]+) <([\w_]+)\+0x([0-9a-f]+)")
 ADDR = re.compile("[0-9a-f]+")
 SYM = re.compile("<([\w_]+)(?:\+0x([0-9a-f]+))?>")
+IMM = re.compile("#0x([a-f0-9]+)")
 
 def optype(operand):
 	if REG.match(operand):
@@ -30,28 +31,55 @@ def optype(operand):
 		sym, off = m.groups()
 		off = 0 if off is None else int(off,16)
 		return ('s', sym, off)
+	m = IMM.match(operand)
+	if m:
+		return ('i', int(m.group(1),16))
 	return ('?', operand)
 
 class Instr(object):
 
 	def __init__(self, opc, *operands):
 		self.opcode = opc
-		self.operands = operands
+		self.operands = list(operands)
 		self.optypes = map(optype, operands)
+		i = 0
+		# join adresses & symbols
+		# remove comments
+		while i < len(self.optypes)-1:
+			if self.optypes[i][0] == 'a' and self.optypes[i+1][0] == 's':
+				self.optypes[i] = ('a',
+					self.optypes[i][1], self.optypes[i+1][1], self.optypes[i+1][2])
+				del self.optypes[i+1]
+				self.operands[i] += ' ' + self.operands[i+1]
+				del self.operands[i+1]
+			if self.optypes[i][0] == '?' and self.optypes[i][1] == '//':
+				del self.optypes[i:]
+				del self.operands[i:]
+			i += 1
 
 	def __repr__(self):
 		return self.opcode + str(self.optypes)
 
 	def __str__(self):
-		return self.__repr__()
+		return self.opcode + ' ' + ' '.join(self.operands)
 
 	def match(self, opc, *operands):
 		if not re.match(opc,self.opcode):
 			return False
+		var = {}
 		for x,y in zip(self.optypes, operands):
-			if x[0] != y[0]: return False
+			if y in 'xyz':
+				if x[0] != 'r': return False
+				if y in var:
+					if x[1] != var[y]: return False
+				else:
+					var[y] = x[1]
+			if y in 'rasim' and not x[0] == y: return False
 		return True
-			
+
+def find_insns(insns, *filt):
+	return [x for x in insns if x.match(*filt)]
+
 def dis(file):
 	insns = []
 	for line in file:
@@ -61,13 +89,19 @@ def dis(file):
 		tokens = [re.sub(',$','',x) for x in tokens]
 		insns.append(Instr(tokens[2],*tokens[3:]))
 	print '\n'.join(map(str,insns))
-	for instr in insns:
-		if instr.match('ldr','r'):
-			print "load %s" % instr
-		if instr.match('st'):
-			print "store %s" % instr
-		if instr.match('b'):
-			print "branch %s" % instr
+	l = find_insns(insns,'ldr','r')
+	print '\n'.join(map(repr,l))
+	l = find_insns(insns,'add','x','x')
+	print '\n'.join(map(repr,l))
+	l = find_insns(insns,'add','x','y')
+	print '\n'.join(map(repr,l))
+
+#		if instr.match('st'):
+#			print "store %s" % repr(instr)
+#		if instr.match('b'):
+#			print "branch %s" % repr(instr)
+#		if instr.match('mov'):
+#			print "mov %s" % repr(instr)
 
 def main():
 	with open(sys.argv[1],"rb") as f:

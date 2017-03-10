@@ -38,8 +38,9 @@ def optype(operand):
 
 class Instr(object):
 
-	def __init__(self, opc, *operands):
+	def __init__(self, addr, opc, *operands):
 		self.opcode = opc
+		self.address = addr
 		self.operands = list(operands)
 		self.optypes = map(optype, operands)
 		i = 0
@@ -87,14 +88,22 @@ def dis(file):
 		if not m: continue
 		tokens = line.split()
 		tokens = [re.sub(',$','',x) for x in tokens]
-		insns.append(Instr(tokens[2],*tokens[3:]))
+		insns.append(Instr(tokens[0],tokens[2],*tokens[3:]))
+	return insns
+
+def test(insns):
 	print '\n'.join(map(str,insns))
-	l = find_insns(insns,'ldr','r')
+	l = find_insns(insns,'b')
 	print '\n'.join(map(repr,l))
-	l = find_insns(insns,'add','x','x')
-	print '\n'.join(map(repr,l))
-	l = find_insns(insns,'add','x','y')
-	print '\n'.join(map(repr,l))
+	
+	
+#	l = find_insns(insns,'ldr','r')
+#	print '\n'.join(map(repr,l))
+#	l = find_insns(insns,'add','x','x')
+#	print '\n'.join(map(repr,l))
+#	l = find_insns(insns,'add','x','y')
+#	print '\n'.join(map(repr,l))
+#	l = find_insns(insns,'','x','y')
 
 #		if instr.match('st'):
 #			print "store %s" % repr(instr)
@@ -105,7 +114,8 @@ def dis(file):
 
 def main():
 	with open(sys.argv[1],"rb") as f:
-		dis(f)
+		insns = dis(f)
+		test(insns)
 
 if __name__ == '__main__':
 	main()
